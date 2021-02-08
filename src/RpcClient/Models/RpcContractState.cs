@@ -1,26 +1,31 @@
 using Neo.IO.Json;
-using Neo.Ledger;
+using Neo.SmartContract;
 using Neo.SmartContract.Manifest;
-using System;
 
-public class RpcContractState
+namespace Neo.Network.RPC.Models
 {
-    public ContractState ContractState { get; set; }
-
-    public JObject ToJson()
+    public class RpcContractState
     {
-        return ContractState.ToJson();
-    }
+        public ContractState ContractState { get; set; }
 
-    public static RpcContractState FromJson(JObject json)
-    {
-        RpcContractState state = new RpcContractState();
-        state.ContractState = new ContractState
+        public JObject ToJson()
         {
-            Id = (int)json["id"].AsNumber(),
-            Script = Convert.FromBase64String(json["script"].AsString()),
-            Manifest = ContractManifest.FromJson(json["manifest"])
-        };
-        return state;
+            return ContractState.ToJson();
+        }
+
+        public static RpcContractState FromJson(JObject json)
+        {
+            return new RpcContractState
+            {
+                ContractState = new ContractState
+                {
+                    Id = (int)json["id"].AsNumber(),
+                    UpdateCounter = (ushort)json["updatecounter"].AsNumber(),
+                    Hash = UInt160.Parse(json["hash"].AsString()),
+                    Nef = RpcNefFile.FromJson(json["nef"]),
+                    Manifest = ContractManifest.FromJson(json["manifest"])
+                }
+            };
+        }
     }
 }

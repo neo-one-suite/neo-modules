@@ -5,6 +5,7 @@ using Neo.SmartContract.Manifest;
 using Neo.SmartContract.Native;
 using Neo.VM;
 using Neo.Wallets;
+using System.Threading.Tasks;
 
 namespace Neo.Network.RPC.Tests
 {
@@ -24,19 +25,19 @@ namespace Neo.Network.RPC.Tests
         }
 
         [TestMethod]
-        public void TestInvoke()
+        public async Task TestInvoke()
         {
             byte[] testScript = NativeContract.GAS.Hash.MakeScript("balanceOf", UInt160.Zero);
             UT_TransactionManager.MockInvokeScript(rpcClientMock, testScript, new ContractParameter { Type = ContractParameterType.ByteArray, Value = "00e057eb481b".HexToBytes() });
 
             ContractClient contractClient = new ContractClient(rpcClientMock.Object);
-            var result = contractClient.TestInvoke(NativeContract.GAS.Hash, "balanceOf", UInt160.Zero);
+            var result = await contractClient.TestInvokeAsync(NativeContract.GAS.Hash, "balanceOf", UInt160.Zero);
 
             Assert.AreEqual(30000000000000L, (long)result.Stack[0].GetInteger());
         }
 
         [TestMethod]
-        public void TestDeployContract()
+        public async Task TestDeployContract()
         {
             byte[] script;
             var manifest = new ContractManifest()
@@ -44,27 +45,24 @@ namespace Neo.Network.RPC.Tests
                 Permissions = new[] { ContractPermission.DefaultPermission },
                 Abi = new ContractAbi()
                 {
-                    Hash = new byte[1].ToScriptHash(),
                     Events = new ContractEventDescriptor[0],
                     Methods = new ContractMethodDescriptor[0]
                 },
                 Groups = new ContractGroup[0],
-                SafeMethods = WildcardContainer<string>.Create(),
                 Trusts = WildcardContainer<UInt160>.Create(),
                 SupportedStandards = new string[] { "NEP-10" },
                 Extra = null,
             };
-            manifest.Features = ContractFeatures.HasStorage | ContractFeatures.Payable;
             using (ScriptBuilder sb = new ScriptBuilder())
             {
-                sb.EmitSysCall(ApplicationEngine.System_Contract_Create, new byte[1], manifest.ToString());
+                sb.EmitDynamicCall(NativeContract.ContractManagement.Hash, "deploy", new byte[1], manifest.ToString());
                 script = sb.ToArray();
             }
 
             UT_TransactionManager.MockInvokeScript(rpcClientMock, script, new ContractParameter());
 
             ContractClient contractClient = new ContractClient(rpcClientMock.Object);
-            var result = contractClient.CreateDeployContractTx(new byte[1], manifest, keyPair1);
+            var result = await contractClient.CreateDeployContractTxAsync(new byte[1], manifest, keyPair1);
 
             Assert.IsNotNull(result);
         }

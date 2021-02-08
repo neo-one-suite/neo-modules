@@ -1,11 +1,10 @@
 using Neo.IO.Json;
-using System.Numerics;
 
 namespace Neo.Network.RPC.Models
 {
     public class RpcUnclaimedGas
     {
-        public BigInteger Unclaimed { get; set; }
+        public long Unclaimed { get; set; }
 
         public string Address { get; set; }
 
@@ -19,10 +18,11 @@ namespace Neo.Network.RPC.Models
 
         public static RpcUnclaimedGas FromJson(JObject json)
         {
-            RpcUnclaimedGas gas = new RpcUnclaimedGas();
-            gas.Unclaimed = BigInteger.Parse(json["unclaimed"].AsString());
-            gas.Address = json["address"].AsString();
-            return gas;
+            return new RpcUnclaimedGas
+            {
+                Unclaimed = long.Parse(json["unclaimed"].AsString()),
+                Address = json["address"].AsString()
+            };
         }
     }
 }

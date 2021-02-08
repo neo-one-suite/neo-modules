@@ -1,0 +1,37 @@
+using Neo.IO.Json;
+using Neo.Network.P2P.Payloads;
+using Neo.SmartContract.Native;
+using System.Linq;
+
+namespace Neo.Plugins
+{
+    static class Utility
+    {
+        public static JObject BlockToJson(Block block)
+        {
+            JObject json = block.ToJson();
+            json["tx"] = block.Transactions.Select(p => TransactionToJson(p)).ToArray();
+            return json;
+        }
+
+        public static JObject TransactionToJson(Transaction tx)
+        {
+            JObject json = tx.ToJson();
+            json["sysfee"] = tx.SystemFee.ToString();
+            json["netfee"] = tx.NetworkFee.ToString();
+            return json;
+        }
+
+        public static JObject NativeContractToJson(this NativeContract contract)
+        {
+            return new JObject
+            {
+                ["id"] = contract.Id,
+                ["hash"] = contract.Hash.ToString(),
+                ["nef"] = contract.Nef.ToJson(),
+                ["manifest"] = contract.Manifest.ToJson(),
+                ["activeblockindex"] = contract.ActiveBlockIndex
+            };
+        }
+    }
+}

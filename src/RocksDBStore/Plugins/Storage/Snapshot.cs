@@ -1,21 +1,19 @@
-using Neo.IO.Caching;
 using Neo.Persistence;
 using RocksDbSharp;
+using System;
 using System.Collections.Generic;
 
 namespace Neo.Plugins.Storage
 {
     internal class Snapshot : ISnapshot
     {
-        private readonly Store store;
         private readonly RocksDb db;
         private readonly RocksDbSharp.Snapshot snapshot;
         private readonly WriteBatch batch;
         private readonly ReadOptions options;
 
-        public Snapshot(Store store, RocksDb db)
+        public Snapshot(RocksDb db)
         {
-            this.store = store;
             this.db = db;
             this.snapshot = db.CreateSnapshot();
             this.batch = new WriteBatch();
@@ -30,19 +28,21 @@ namespace Neo.Plugins.Storage
             db.Write(batch, Options.WriteDefault);
         }
 
-        public void Delete(byte table, byte[] key)
+        public void Delete(byte[] key)
         {
-            batch.Delete(key, store.GetFamily(table));
+            batch.Delete(key);
         }
 
-        public void Put(byte table, byte[] key, byte[] value)
+        public void Put(byte[] key, byte[] value)
         {
-            batch.Put(key, value, store.GetFamily(table));
+            batch.Put(key, value);
         }
 
-        public IEnumerable<(byte[] Key, byte[] Value)> Seek(byte table, byte[] keyOrPrefix, SeekDirection direction)
+        public IEnumerable<(byte[] Key, byte[] Value)> Seek(byte[] keyOrPrefix, SeekDirection direction)
         {
-            using var it = db.NewIterator(store.GetFamily(table), options);
+            if (keyOrPrefix == null) keyOrPrefix = Array.Empty<byte>();
+
+            using var it = db.NewIterator(readOptions: options);
 
             if (direction == SeekDirection.Forward)
                 for (it.Seek(keyOrPrefix); it.Valid(); it.Next())
@@ -52,9 +52,14 @@ namespace Neo.Plugins.Storage
                     yield return (it.Key(), it.Value());
         }
 
-        public byte[] TryGet(byte table, byte[] key)
+        public bool Contains(byte[] key)
         {
-            return db.Get(key, store.GetFamily(table), options);
+            return db.Get(key, Array.Empty<byte>(), 0, 0, readOptions: options) >= 0;
+        }
+
+        public byte[] TryGet(byte[] key)
+        {
+            return db.Get(key, readOptions: options);
         }
 
         public void Dispose()
