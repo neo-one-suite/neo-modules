@@ -12,6 +12,7 @@ using Neo.VM;
 using Neo.Wallets;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Numerics;
 using System.Text;
@@ -34,18 +35,19 @@ namespace Neo.Plugins
         private uint _maxResults;
         private bool _shouldTrackNonStandardMintTokensEvent;
         private Neo.IO.Data.LevelDB.Snapshot _levelDbSnapshot;
+        private static readonly Fixed8 maxGas = Fixed8.FromDecimal(1m);
 
         public override void Configure()
         {
             if (_db == null)
             {
                 var dbPath = GetConfiguration().GetSection("DBPath").Value ?? "Nep5BalanceData";
-                _db = DB.Open(dbPath, new Options { CreateIfMissing = true });
+                _db = DB.Open(Path.GetFullPath(dbPath), new Options { CreateIfMissing = true });
             }
-            _shouldTrackHistory = (GetConfiguration().GetSection("TrackHistory").Value ?? true.ToString()) != false.ToString();
-            _recordNullAddressHistory = (GetConfiguration().GetSection("RecordNullAddressHistory").Value ?? false.ToString()) != false.ToString();
+            _shouldTrackHistory = bool.TryParse(GetConfiguration().GetSection("TrackHistory").Value, out bool b1) && b1;
+            _recordNullAddressHistory = bool.TryParse(GetConfiguration().GetSection("RecordNullAddressHistory").Value, out bool b2) && b2;
             _maxResults = uint.Parse(GetConfiguration().GetSection("MaxResults").Value ?? "1000");
-            _shouldTrackNonStandardMintTokensEvent = (GetConfiguration().GetSection("TrackNonStandardMintTokens").Value ?? false.ToString()) != false.ToString();
+            _shouldTrackNonStandardMintTokensEvent = bool.TryParse(GetConfiguration().GetSection("TrackNonStandardMintTokens").Value, out bool b3) && b3;
         }
 
         private void ResetBatch()
@@ -67,10 +69,10 @@ namespace Neo.Plugins
         private void RecordTransferHistory(Snapshot snapshot, UInt160 scriptHash, UInt160 from, UInt160 to, BigInteger amount, UInt256 txHash, ref ushort transferIndex)
         {
             if (!_shouldTrackHistory) return;
+            Header header = snapshot.GetHeader(snapshot.Height);
             if (_recordNullAddressHistory || from != UInt160.Zero)
             {
-                _transfersSent.Add(new Nep5TransferKey(from,
-                        snapshot.GetHeader(snapshot.Height).Timestamp, scriptHash, transferIndex),
+                _transfersSent.Add(new Nep5TransferKey(from, header.Timestamp, scriptHash, transferIndex),
                     new Nep5Transfer
                     {
                         Amount = amount,
@@ -82,8 +84,7 @@ namespace Neo.Plugins
 
             if (_recordNullAddressHistory || to != UInt160.Zero)
             {
-                _transfersReceived.Add(new Nep5TransferKey(to,
-                        snapshot.GetHeader(snapshot.Height).Timestamp, scriptHash, transferIndex),
+                _transfersReceived.Add(new Nep5TransferKey(to, header.Timestamp, scriptHash, transferIndex),
                     new Nep5Transfer
                     {
                         Amount = amount,
@@ -191,10 +192,13 @@ namespace Neo.Plugins
                     script = sb.ToArray();
                 }
 
-                ApplicationEngine engine = ApplicationEngine.Run(script, snapshot);
-                if (engine.State.HasFlag(VMState.FAULT)) continue;
-                if (engine.ResultStack.Count <= 0) continue;
-                nep5BalancePair.Value.Balance = engine.ResultStack.Pop().GetBigInteger();
+                using (ApplicationEngine engine = ApplicationEngine.Run(script, snapshot.Clone(), extraGAS: maxGas))
+                {
+                    if (engine.State.HasFlag(VMState.FAULT)) continue;
+                    if (engine.ResultStack.Count <= 0) continue;
+                    nep5BalancePair.Value.Balance = engine.ResultStack.Pop().GetBigInteger();
+                }
+
                 nep5BalancePair.Value.LastUpdatedBlock = snapshot.Height;
                 if (nep5BalancePair.Value.Balance == 0)
                 {
