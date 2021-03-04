@@ -1,5 +1,4 @@
 using Neo.IO.Json;
-using Neo.SmartContract.Native;
 using Neo.VM;
 using Neo.VM.Types;
 using System;
@@ -14,7 +13,7 @@ namespace Neo.Network.RPC.Models
 
         public VM.VMState State { get; set; }
 
-        public string GasConsumed { get; set; }
+        public long GasConsumed { get; set; }
 
         public StackItem[] Stack { get; set; }
 
@@ -48,8 +47,8 @@ namespace Neo.Network.RPC.Models
             RpcInvokeResult invokeScriptResult = new RpcInvokeResult
             {
                 Script = json["script"].AsString(),
-                State = json["state"].TryGetEnum<VM.VMState>(),
-                GasConsumed = json["gasconsumed"].AsString()
+                State = json["state"].TryGetEnum<VMState>(),
+                GasConsumed = long.Parse(json["gasconsumed"].AsString()),
             };
             if (json.ContainsProperty("exception"))
                 invokeScriptResult.Exception = json["exception"]?.AsString();

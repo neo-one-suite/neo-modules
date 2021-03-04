@@ -41,7 +41,7 @@ namespace Neo.Network.RPC.Tests
 
         public static Mock<RpcClient> MockRpcClient(UInt160 sender, byte[] script)
         {
-            var mockRpc = new Mock<RpcClient>(MockBehavior.Strict, "http://seed1.neo.org:10331", null, null);
+            var mockRpc = new Mock<RpcClient>(MockBehavior.Strict, new Uri("http://seed1.neo.org:10331"), null, null);
 
             // MockHeight
             mockRpc.Setup(p => p.RpcSendAsync("getblockcount")).ReturnsAsync(100).Verifiable();
@@ -74,7 +74,7 @@ namespace Neo.Network.RPC.Tests
 
         public static Mock<RpcClient> MockMultiSig(UInt160 multiHash, byte[] script)
         {
-            var mockRpc = new Mock<RpcClient>(MockBehavior.Strict, "http://seed1.neo.org:10331", null, null);
+            var mockRpc = new Mock<RpcClient>(MockBehavior.Strict, new Uri("http://seed1.neo.org:10331"), null, null);
 
             // MockHeight
             mockRpc.Setup(p => p.RpcSendAsync("getblockcount")).ReturnsAsync(100).Verifiable();
@@ -110,7 +110,7 @@ namespace Neo.Network.RPC.Tests
             var result = new RpcInvokeResult()
             {
                 Stack = parameters.Select(p => p.ToStackItem()).ToArray(),
-                GasConsumed = "100",
+                GasConsumed = 100,
                 Script = Convert.ToBase64String(script),
                 State = VMState.HALT
             };
@@ -164,7 +164,7 @@ namespace Neo.Network.RPC.Tests
             Assert.IsTrue(Crypto.VerifySignature(tx.GetHashData(), signature, keyPair1.PublicKey));
             // verify network fee and system fee
             Assert.AreEqual(100000000/*Mock*/, tx.NetworkFee);
-            Assert.AreEqual(10000000000, tx.SystemFee);
+            Assert.AreEqual(100, tx.SystemFee);
 
             // duplicate sign should not add new witness
             await txManager.AddSignature(keyPair1).SignAsync();

@@ -23,9 +23,9 @@ namespace Neo.Network.RPC
     public class RpcClient : IDisposable
     {
         private readonly HttpClient httpClient;
-        private readonly string baseAddress;
+        private readonly Uri baseAddress;
 
-        public RpcClient(string url, string rpcUser = default, string rpcPass = default)
+        public RpcClient(Uri url, string rpcUser = default, string rpcPass = default)
         {
             httpClient = new HttpClient();
             baseAddress = url;
@@ -36,7 +36,7 @@ namespace Neo.Network.RPC
             }
         }
 
-        public RpcClient(HttpClient client, string url)
+        public RpcClient(HttpClient client, Uri url)
         {
             httpClient = client;
             baseAddress = url;
@@ -147,6 +147,15 @@ namespace Neo.Network.RPC
         }
 
         /// <summary>
+        /// Gets the number of block header in the main chain.
+        /// </summary>
+        public async Task<uint> GetBlockHeaderCountAsync()
+        {
+            var result = await RpcSendAsync(GetRpcName()).ConfigureAwait(false);
+            return (uint)result.AsNumber();
+        }
+
+        /// <summary>
         /// Gets the number of blocks in the main chain.
         /// </summary>
         public async Task<uint> GetBlockCountAsync()
@@ -203,9 +212,18 @@ namespace Neo.Network.RPC
                 Id = (int)json["id"].AsNumber(),
                 UpdateCounter = (ushort)json["updatecounter"].AsNumber(),
                 Hash = UInt160.Parse(json["hash"].AsString()),
-                Script = Convert.FromBase64String(json["script"].AsString()),
+                Nef = RpcNefFile.FromJson(json["nef"]),
                 Manifest = ContractManifest.FromJson(json["manifest"])
             };
+        }
+
+        /// <summary>
+        /// Get all native contracts.
+        /// </summary>
+        public async Task<RpcNativeContract[]> GetNativeContractsAsync()
+        {
+            var result = await RpcSendAsync(GetRpcName()).ConfigureAwait(false);
+            return ((JArray)result).Select(p => RpcNativeContract.FromJson(p)).ToArray();
         }
 
         /// <summary>
