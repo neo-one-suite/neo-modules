@@ -31,7 +31,7 @@ namespace Neo.Consensus
         public override void Deserialize(BinaryReader reader)
         {
             base.Deserialize(reader);
-            ChangeViewMessages = reader.ReadSerializableArray<ChangeViewPayloadCompact>(ProtocolSettings.Default.ValidatorsCount).ToDictionary(p => (int)p.ValidatorIndex);
+            ChangeViewMessages = reader.ReadSerializableArray<ChangeViewPayloadCompact>(DBFTPlugin.System.Settings.ValidatorsCount).ToDictionary(p => (int)p.ValidatorIndex);
             if (reader.ReadBoolean())
                 PrepareRequestMessage = reader.ReadSerializable<PrepareRequest>();
             else
@@ -41,8 +41,8 @@ namespace Neo.Consensus
                     PreparationHash = new UInt256(reader.ReadFixedBytes(preparationHashSize));
             }
 
-            PreparationMessages = reader.ReadSerializableArray<PreparationPayloadCompact>(ProtocolSettings.Default.ValidatorsCount).ToDictionary(p => (int)p.ValidatorIndex);
-            CommitMessages = reader.ReadSerializableArray<CommitPayloadCompact>(ProtocolSettings.Default.ValidatorsCount).ToDictionary(p => (int)p.ValidatorIndex);
+            PreparationMessages = reader.ReadSerializableArray<PreparationPayloadCompact>(DBFTPlugin.System.Settings.ValidatorsCount).ToDictionary(p => (int)p.ValidatorIndex);
+            CommitMessages = reader.ReadSerializableArray<CommitPayloadCompact>(DBFTPlugin.System.Settings.ValidatorsCount).ToDictionary(p => (int)p.ValidatorIndex);
         }
 
         internal ExtensiblePayload[] GetChangeViewPayloads(ConsensusContext context)
@@ -70,16 +70,16 @@ namespace Neo.Consensus
         internal ExtensiblePayload GetPrepareRequestPayload(ConsensusContext context)
         {
             if (PrepareRequestMessage == null) return null;
-            if (!PreparationMessages.TryGetValue(context.Block.ConsensusData.PrimaryIndex, out PreparationPayloadCompact compact))
+            if (!PreparationMessages.TryGetValue(context.Block.PrimaryIndex, out PreparationPayloadCompact compact))
                 return null;
             return context.CreatePayload(PrepareRequestMessage, compact.InvocationScript);
         }
 
         internal ExtensiblePayload[] GetPrepareResponsePayloads(ConsensusContext context)
         {
-            UInt256 preparationHash = PreparationHash ?? context.PreparationPayloads[context.Block.ConsensusData.PrimaryIndex]?.Hash;
+            UInt256 preparationHash = PreparationHash ?? context.PreparationPayloads[context.Block.PrimaryIndex]?.Hash;
             if (preparationHash is null) return Array.Empty<ExtensiblePayload>();
-            return PreparationMessages.Values.Where(p => p.ValidatorIndex != context.Block.ConsensusData.PrimaryIndex).Select(p => context.CreatePayload(new PrepareResponse
+            return PreparationMessages.Values.Where(p => p.ValidatorIndex != context.Block.PrimaryIndex).Select(p => context.CreatePayload(new PrepareResponse
             {
                 BlockIndex = BlockIndex,
                 ValidatorIndex = p.ValidatorIndex,
