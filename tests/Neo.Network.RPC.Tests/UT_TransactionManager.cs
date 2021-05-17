@@ -165,14 +165,14 @@ namespace Neo.Network.RPC.Tests
             var tx = txManager.Tx;
             byte[] signature = tx.Witnesses[0].InvocationScript.Skip(2).ToArray();
 
-            Assert.IsTrue(Crypto.VerifySignature(tx.GetSignData(client.protocolSettings.Magic), signature, keyPair1.PublicKey));
+            Assert.IsTrue(Crypto.VerifySignature(tx.GetSignData(client.protocolSettings.Network), signature, keyPair1.PublicKey));
             // verify network fee and system fee
             Assert.AreEqual(100000000/*Mock*/, tx.NetworkFee);
             Assert.AreEqual(100, tx.SystemFee);
 
             // duplicate sign should not add new witness
-            await txManager.AddSignature(keyPair1).SignAsync();
-            Assert.AreEqual(1, txManager.Tx.Witnesses.Length);
+            await ThrowsAsync<Exception>(async () => await txManager.AddSignature(keyPair1).SignAsync());
+            Assert.AreEqual(null, txManager.Tx.Witnesses);
 
             // throw exception when the KeyPair is wrong
             await ThrowsAsync<Exception>(async () => await txManager.AddSignature(keyPair2).SignAsync());

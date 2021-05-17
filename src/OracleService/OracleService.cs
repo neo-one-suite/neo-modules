@@ -23,8 +23,6 @@ using System.Net;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using NJArray = Newtonsoft.Json.Linq.JArray;
-using NJObject = Newtonsoft.Json.Linq.JObject;
 
 namespace Neo.Plugins
 {
@@ -43,10 +41,7 @@ namespace Neo.Plugins
         private int counter;
         private NeoSystem System;
 
-        private static readonly IReadOnlyDictionary<string, IOracleProtocol> protocols = new Dictionary<string, IOracleProtocol>
-        {
-            ["https"] = new OracleHttpsProtocol()
-        };
+        private readonly Dictionary<string, IOracleProtocol> protocols = new Dictionary<string, IOracleProtocol>();
 
         public override string Description => "Built-in oracle plugin";
 
@@ -59,7 +54,7 @@ namespace Neo.Plugins
 
         protected override void OnSystemLoaded(NeoSystem system)
         {
-            if (system.Settings.Magic != Settings.Default.Network) return;
+            if (system.Settings.Network != Settings.Default.Network) return;
             System = system;
             System.ServiceAdded += NeoSystem_ServiceAdded;
             RpcServerPlugin.RegisterMethods(this, Settings.Default.Network);
@@ -108,10 +103,20 @@ namespace Neo.Plugins
                 Console.WriteLine("Please open wallet first!");
                 return;
             }
-            if (!CheckOracleAvaiblable(System.StoreView, out ECPoint[] oracles)) throw new ArgumentException("The oracle service is unavailable");
-            if (!CheckOracleAccount(wallet, oracles)) throw new ArgumentException("There is no oracle account in wallet");
+            if (!CheckOracleAvaiblable(System.StoreView, out ECPoint[] oracles))
+            {
+                Console.WriteLine("The oracle service is unavailable");
+                return;
+            }
+            if (!CheckOracleAccount(wallet, oracles))
+            {
+                Console.WriteLine("There is no oracle account in wallet");
+                return;
+            }
 
             this.wallet = wallet;
+            protocols["https"] = new OracleHttpsProtocol();
+            protocols["neofs"] = new OracleNeoFSProtocol(wallet, oracles);
             started = true;
             timer = new Timer(OnTimer, null, RefreshInterval, Timeout.Infinite);
 
@@ -132,7 +137,7 @@ namespace Neo.Plugins
 
         void IPersistencePlugin.OnPersist(NeoSystem system, Block block, DataCache snapshot, IReadOnlyList<Blockchain.ApplicationExecuted> applicationExecutedList)
         {
-            if (system.Settings.Magic != Settings.Default.Network) return;
+            if (system.Settings.Network != Settings.Default.Network) return;
             if (stopped || !started) return;
             if (!CheckOracleAvaiblable(snapshot, out ECPoint[] oracles) || !CheckOracleAccount(wallet, oracles))
                 OnStop();
@@ -263,8 +268,8 @@ namespace Neo.Plugins
                     var oraclePub = account.GetKey()?.PublicKey;
                     if (!account.HasKey || account.Lock || !oraclePublicKeys.Contains(oraclePub)) continue;
 
-                    var txSign = responseTx.Sign(account.GetKey(), System.Settings.Magic);
-                    var backTxSign = backupTx.Sign(account.GetKey(), System.Settings.Magic);
+                    var txSign = responseTx.Sign(account.GetKey(), System.Settings.Network);
+                    var backTxSign = backupTx.Sign(account.GetKey(), System.Settings.Network);
                     AddResponseTxSign(snapshot, requestId, oraclePub, txSign, responseTx, backupTx, backTxSign);
                     tasks.Add(SendResponseSignatureAsync(requestId, txSign, account.GetKey()));
 
@@ -320,7 +325,7 @@ namespace Neo.Plugins
             {
                 Version = 0,
                 Nonce = unchecked((uint)response.Id),
-                ValidUntilBlock = requestTx.BlockIndex + Transaction.MaxValidUntilBlockIncrement,
+                ValidUntilBlock = requestTx.BlockIndex + settings.MaxValidUntilBlockIncrement,
                 Signers = new[]
                 {
                     new Signer
@@ -410,13 +415,13 @@ namespace Neo.Plugins
             if (responseTx != null)
             {
                 task.Tx = responseTx;
-                var data = task.Tx.GetSignData(System.Settings.Magic);
+                var data = task.Tx.GetSignData(System.Settings.Network);
                 task.Signs.Where(p => !Crypto.VerifySignature(data, p.Value, p.Key)).ForEach(p => task.Signs.Remove(p.Key, out _));
             }
             if (backupTx != null)
             {
                 task.BackupTx = backupTx;
-                var data = task.BackupTx.GetSignData(System.Settings.Magic);
+                var data = task.BackupTx.GetSignData(System.Settings.Network);
                 task.BackupSigns.Where(p => !Crypto.VerifySignature(data, p.Value, p.Key)).ForEach(p => task.BackupSigns.Remove(p.Key, out _));
                 task.BackupSigns.TryAdd(oraclePub, backupSign);
             }
@@ -427,9 +432,9 @@ namespace Neo.Plugins
                 return;
             }
 
-            if (Crypto.VerifySignature(task.Tx.GetSignData(System.Settings.Magic), sign, oraclePub))
+            if (Crypto.VerifySignature(task.Tx.GetSignData(System.Settings.Network), sign, oraclePub))
                 task.Signs.TryAdd(oraclePub, sign);
-            else if (Crypto.VerifySignature(task.BackupTx.GetSignData(System.Settings.Magic), sign, oraclePub))
+            else if (Crypto.VerifySignature(task.BackupTx.GetSignData(System.Settings.Network), sign, oraclePub))
                 task.BackupSigns.TryAdd(oraclePub, sign);
             else
                 throw new RpcException(-100, "Invalid response transaction sign");
@@ -446,9 +451,9 @@ namespace Neo.Plugins
             if (string.IsNullOrEmpty(filterArgs))
                 return Utility.StrictUTF8.GetBytes(input);
 
-            NJObject beforeObject = NJObject.Parse(input);
-            NJArray afterObjects = new NJArray(beforeObject.SelectTokens(filterArgs));
-            return Utility.StrictUTF8.GetBytes(afterObjects.ToString(Newtonsoft.Json.Formatting.None));
+            JObject beforeObject = JObject.Parse(input);
+            JArray afterObjects = beforeObject.JsonPath(filterArgs);
+            return afterObjects.ToByteArray(false);
         }
 
         private bool CheckTxSign(DataCache snapshot, Transaction tx, ConcurrentDictionary<ECPoint, byte[]> OracleSigns)
